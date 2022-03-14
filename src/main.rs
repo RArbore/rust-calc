@@ -1,11 +1,28 @@
 use std::io;
 use std::io::BufRead;
 
-fn parse_char(c: char, s: &str) -> Option<&str> {
-    if s.chars().nth(0)? == c {
-        Some(&s[1..])
+fn parse_head<F: Fn(char) -> bool>(cond: F, s: &str) -> Option<(char, &str)> {
+    let c = s.chars().nth(0)?;
+    if cond(c) {
+        Some((c, &s[1..]))
     } else {
         None
+    }
+}
+
+fn parse_while<F: Fn(char) -> bool>(cond: F, s: &str) -> Option<(&str, &str)> {
+    let mut i = 0;
+    while i < s.len() {
+        if cond(s.chars().nth(i).unwrap()) {
+            i += 1;
+        } else {
+            break;
+        }
+    }
+    if i == 0 {
+        None
+    } else {
+        Some((&s[..i], &s[i..]))
     }
 }
 
@@ -19,7 +36,12 @@ struct Literal {
 
 impl Literal {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
-        None
+        let num_s = parse_while(|c| c.is_digit(10) || c == '-' || c == '.', s)?;
+        let num = match num_s.0.parse::<f64>() {
+            Ok(n) => n,
+            Err(_) => return None,
+        };
+        Some((Box::new(Literal { num }), num_s.1))
     }
 }
 
@@ -35,12 +57,12 @@ struct Group {
 
 impl Group {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
-        let res: Option<(Box<dyn Node>, &str)> = {
-            let s = parse_char('(', s)?;
+        let res: Option<(Box<dyn Node>, &str)> = (|| {
+            let s = parse_head(|x| x == '(', s)?.1;
             let (expr, s) = Group::parse(s)?;
-            let s = parse_char(')', s)?;
-            Some((Box::new(Group { expr }), s))
-        };
+            let s = parse_head(|x| x == ')', s)?.1;
+            Some((Box::new(Group { expr }) as Box<dyn Node>, s))
+        })();
         match res {
             None => Literal::parse(s),
             some => some,

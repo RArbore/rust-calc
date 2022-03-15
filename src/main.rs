@@ -59,7 +59,7 @@ impl Group {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
         let res: Option<(Box<dyn Node>, &str)> = (|| {
             let s = parse_head(|x| x == '(', s)?.1;
-            let (expr, s) = Group::parse(s)?;
+            let (expr, s) = Add::parse(s)?;
             let s = parse_head(|x| x == ')', s)?.1;
             Some((Box::new(Group { expr }) as Box<dyn Node>, s))
         })();
@@ -76,8 +76,34 @@ impl Node for Group {
     }
 }
 
+struct Add {
+    expr1: Box<dyn Node>,
+    expr2: Box<dyn Node>,
+}
+
+impl Add {
+    fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
+        let res: Option<(Box<dyn Node>, &str)> = (|| {
+            let (expr1, s) = Group::parse(s)?;
+            let s = parse_head(|x| x == '+', s)?.1;
+            let (expr2, s) = Group::parse(s)?;
+            Some((Box::new(Add { expr1, expr2 }) as Box<dyn Node>, s))
+        })();
+        match res {
+            None => Group::parse(s),
+            some => some,
+        }
+    }
+}
+
+impl Node for Add {
+    fn calc(&self) -> f64 {
+        self.expr1.calc() + self.expr2.calc()
+    }
+}
+
 fn parse(s: &str) -> Option<Box<dyn Node>> {
-    let expr = Group::parse(s)?;
+    let expr = Add::parse(s)?;
     if expr.1.len() > 0 {
         None
     } else {

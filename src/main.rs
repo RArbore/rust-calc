@@ -26,6 +26,14 @@ fn parse_while<F: Fn(char) -> bool>(cond: F, s: &str) -> Option<(&str, &str)> {
     }
 }
 
+fn consume_spaces(x: &str) -> &str {
+    let mut working = x;
+    while working.chars().nth(0).unwrap_or('X') == ' ' {
+        working = &working[1..];
+    }
+    working
+}
+
 trait Node {
     fn calc(&self) -> f64;
 }
@@ -36,6 +44,7 @@ struct Literal {
 
 impl Literal {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
+        let s = consume_spaces(s);
         let num_s = parse_while(|c| c.is_digit(10) || c == '-' || c == '.', s)?;
         let num = match num_s.0.parse::<f64>() {
             Ok(n) => n,
@@ -58,8 +67,10 @@ struct Group {
 impl Group {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
         let res: Option<(Box<dyn Node>, &str)> = (|| {
+            let s = consume_spaces(s);
             let s = parse_head(|x| x == '(', s)?.1;
             let (expr, s) = Add::parse(s)?;
+            let s = consume_spaces(s);
             let s = parse_head(|x| x == ')', s)?.1;
             Some((Box::new(Group { expr }) as Box<dyn Node>, s))
         })();
@@ -83,8 +94,10 @@ struct Add {
 
 impl Add {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
+        let s = consume_spaces(s);
         let res: Option<(Box<dyn Node>, &str)> = (|| {
             let (expr1, s) = Group::parse(s)?;
+            let s = consume_spaces(s);
             let s = parse_head(|x| x == '+', s)?.1;
             let (expr2, s) = Group::parse(s)?;
             Some((Box::new(Add { expr1, expr2 }) as Box<dyn Node>, s))

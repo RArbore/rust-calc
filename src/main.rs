@@ -26,6 +26,22 @@ fn parse_while<F: Fn(char) -> bool>(cond: F, s: &str) -> Option<(&str, &str)> {
     }
 }
 
+fn parse_binary<
+    Fchild: Fn(&str) -> Option<(Box<dyn Node>, &str)>,
+    Fconstruct: Fn(Box<dyn Node>, Box<dyn Node>) -> Box<dyn Node>,
+>(
+    c: char,
+    child: Fchild,
+    construct: Fconstruct,
+    s: &str,
+) -> Option<(Box<dyn Node>, &str)> {
+    let (expr1, s) = child(s)?;
+    let s = consume_spaces(s);
+    let s = parse_head(|x| x == c, s)?.1;
+    let (expr2, s) = child(s)?;
+    Some((construct(expr1, expr2), s))
+}
+
 fn consume_spaces(x: &str) -> &str {
     let mut working = x;
     while working.chars().nth(0).unwrap_or('X') == ' ' {
@@ -87,6 +103,33 @@ impl Node for Group {
     }
 }
 
+struct Exp {
+    expr1: Box<dyn Node>,
+    expr2: Box<dyn Node>,
+}
+
+impl Exp {
+    fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
+        let s = consume_spaces(s);
+        let res: Option<(Box<dyn Node>, &str)> = parse_binary(
+            '^',
+            Group::parse,
+            |expr1, expr2| Box::new(Exp { expr1, expr2 }) as Box<dyn Node>,
+            s,
+        );
+        match res {
+            None => Group::parse(s),
+            some => some,
+        }
+    }
+}
+
+impl Node for Exp {
+    fn calc(&self) -> f64 {
+        self.expr1.calc().powf(self.expr2.calc())
+    }
+}
+
 struct Div {
     expr1: Box<dyn Node>,
     expr2: Box<dyn Node>,
@@ -95,15 +138,14 @@ struct Div {
 impl Div {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
         let s = consume_spaces(s);
-        let res: Option<(Box<dyn Node>, &str)> = (|| {
-            let (expr1, s) = Group::parse(s)?;
-            let s = consume_spaces(s);
-            let s = parse_head(|x| x == '/', s)?.1;
-            let (expr2, s) = Group::parse(s)?;
-            Some((Box::new(Div { expr1, expr2 }) as Box<dyn Node>, s))
-        })();
+        let res: Option<(Box<dyn Node>, &str)> = parse_binary(
+            '/',
+            Exp::parse,
+            |expr1, expr2| Box::new(Div { expr1, expr2 }) as Box<dyn Node>,
+            s,
+        );
         match res {
-            None => Group::parse(s),
+            None => Exp::parse(s),
             some => some,
         }
     }
@@ -123,13 +165,12 @@ struct Mul {
 impl Mul {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
         let s = consume_spaces(s);
-        let res: Option<(Box<dyn Node>, &str)> = (|| {
-            let (expr1, s) = Div::parse(s)?;
-            let s = consume_spaces(s);
-            let s = parse_head(|x| x == '*', s)?.1;
-            let (expr2, s) = Div::parse(s)?;
-            Some((Box::new(Mul { expr1, expr2 }) as Box<dyn Node>, s))
-        })();
+        let res: Option<(Box<dyn Node>, &str)> = parse_binary(
+            '*',
+            Div::parse,
+            |expr1, expr2| Box::new(Mul { expr1, expr2 }) as Box<dyn Node>,
+            s,
+        );
         match res {
             None => Div::parse(s),
             some => some,
@@ -151,13 +192,12 @@ struct Sub {
 impl Sub {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
         let s = consume_spaces(s);
-        let res: Option<(Box<dyn Node>, &str)> = (|| {
-            let (expr1, s) = Mul::parse(s)?;
-            let s = consume_spaces(s);
-            let s = parse_head(|x| x == '-', s)?.1;
-            let (expr2, s) = Mul::parse(s)?;
-            Some((Box::new(Sub { expr1, expr2 }) as Box<dyn Node>, s))
-        })();
+        let res: Option<(Box<dyn Node>, &str)> = parse_binary(
+            '-',
+            Mul::parse,
+            |expr1, expr2| Box::new(Sub { expr1, expr2 }) as Box<dyn Node>,
+            s,
+        );
         match res {
             None => Mul::parse(s),
             some => some,
@@ -179,13 +219,12 @@ struct Add {
 impl Add {
     fn parse(s: &str) -> Option<(Box<dyn Node>, &str)> {
         let s = consume_spaces(s);
-        let res: Option<(Box<dyn Node>, &str)> = (|| {
-            let (expr1, s) = Sub::parse(s)?;
-            let s = consume_spaces(s);
-            let s = parse_head(|x| x == '+', s)?.1;
-            let (expr2, s) = Sub::parse(s)?;
-            Some((Box::new(Add { expr1, expr2 }) as Box<dyn Node>, s))
-        })();
+        let res: Option<(Box<dyn Node>, &str)> = parse_binary(
+            '+',
+            Sub::parse,
+            |expr1, expr2| Box::new(Add { expr1, expr2 }) as Box<dyn Node>,
+            s,
+        );
         match res {
             None => Sub::parse(s),
             some => some,
